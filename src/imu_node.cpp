@@ -11,7 +11,7 @@
 class ImuNode : public rclcpp::Node
 {
 public:
-  ImuNode() 
+  ImuNode()
   : Node("imu_node")
   {
     // declare parametes
@@ -50,9 +50,9 @@ public:
     mag_offset_x_ = this->get_parameter("mag_offset_x").as_double();
     mag_offset_y_ = this->get_parameter("mag_offset_y").as_double();
     mag_offset_z_ = this->get_parameter("mag_offset_z").as_double();
-    this->get_parameter("imu_mag_covVec").as_double_array();
-    this->get_parameter("imu_gyro_covVec").as_double_array();
-    this->get_parameter("imu_accel_covVec").as_double_array();
+    imu_mag_cov = this->get_parameter("imu_mag_covVec").as_double_array();
+    imu_gyro_cov = this->get_parameter("imu_gyro_covVec").as_double_array();
+    imu_accel_cov = this->get_parameter("imu_accel_covVec").as_double_array();
 
     q_rot.setRPY(0, 0, yaw_offset_);
 
@@ -77,8 +77,8 @@ public:
       rclcpp::Parameter("imu_accel_covVec", std::vector<double>(IMU_ACCEL_COV))
       };
 
-    
-   
+
+
     // q_rot.setRPY(0,0,yaw_offset_);
 
     // """ publishers """
@@ -88,7 +88,7 @@ public:
     mag_pub_ = this->create_publisher<sensor_msgs::msg::MagneticField>(mag_topic_.c_str(), 10);
     // """callback"""
     timer_ = this->create_wall_timer(10ms, std::bind(&ImuNode::read_imu, this));
-    
+
     // """ setup serial """
     try
     {
@@ -119,11 +119,11 @@ public:
     }
   }
 
-  
+
 
 private:
-  
-  
+
+
   serial::Serial serial_;
 
   bool if_debug_;
@@ -165,7 +165,7 @@ private:
   void read_imu()
   {
     RCLCPP_INFO_STREAM_ONCE(this->get_logger(), "Starting to read IMU\n" );
-    while(rclcpp::ok())
+    if(true)
     {
       if (!serial_.isOpen()){
         RCLCPP_WARN_STREAM_SKIPFIRST(this->get_logger(), "Serial is not open");
@@ -183,42 +183,42 @@ private:
       }
       if (check_head[0] != FRAME_HEAD)
       {
-        continue;
+        return;
       }
       //check head type
       uint8_t head_type[1] = {0xff};
-      size_t type_s = serial_.read(head_type, 1);
+      (void)serial_.read(head_type, 1);
       if (if_debug_){
         std::cout << "head_type:  " << std::hex << (int)head_type[0] << std::dec << std::endl;
       }
       if (head_type[0] != TYPE_IMU && head_type[0] != TYPE_AHRS && head_type[0] != TYPE_INSGPS && head_type[0] != 0x50 && head_type[0] != TYPE_GROUND)
       {
         RCLCPP_WARN_STREAM_SKIPFIRST(this->get_logger(), "head_type error: " << head_type[0]);
-        continue;
+        return;
       }
       //check head length
       uint8_t check_len[1] = {0xff};
-      size_t len_s = serial_.read(check_len, 1);
+      (void)serial_.read(check_len, 1);
       if (if_debug_){
         std::cout << "check_len: "<< std::dec << (int)check_len[0]  << std::endl;
       }
       if (head_type[0] == TYPE_IMU && check_len[0] != IMU_LEN)
       {
         RCLCPP_WARN_STREAM_SKIPFIRST(this->get_logger(), "head_len error (imu)");
-        continue;
+        return;
       }else if (head_type[0] == TYPE_AHRS && check_len[0] != AHRS_LEN)
       {
         RCLCPP_WARN_STREAM_SKIPFIRST(this->get_logger(), "head_len error (ahrs)");
-        continue;
+        return;
       }else if (head_type[0] == TYPE_INSGPS && check_len[0] != INSGPS_LEN)
       {
         RCLCPP_WARN_STREAM_SKIPFIRST(this->get_logger(), "head_len error (insgps)");
-        continue;
+        return;
       }
       else if (head_type[0] == TYPE_GROUND || head_type[0] == 0x50) // Unknown data, prevent record failure
       {
         uint8_t ground_sn[1];
-        size_t ground_sn_s = serial_.read(ground_sn, 1);
+        (void)serial_.read(ground_sn, 1);
         if (++read_sn_ != ground_sn[0])
         {
           if ( ground_sn[0] < read_sn_)
@@ -228,7 +228,7 @@ private:
             }
             sn_lost_ += 256 - (int)(read_sn_ - ground_sn[0]);
             read_sn_ = ground_sn[0];
-            // continue;
+            // return;
           }
           else
           {
@@ -237,22 +237,22 @@ private:
             }
             sn_lost_ += (int)(ground_sn[0] - read_sn_);
             read_sn_ = ground_sn[0];
-            // continue;
+            // return;
           }
         }
         uint8_t ground_ignore[500];
-        size_t ground_ignore_s = serial_.read(ground_ignore, (check_len[0]+4));
-        continue;
+        (void)serial_.read(ground_ignore, (check_len[0]+4));
+        return;
       }
       //read head sn
       uint8_t check_sn[1] = {0xff};
-      size_t sn_s = serial_.read(check_sn, 1);
+      (void)serial_.read(check_sn, 1);
       uint8_t head_crc8[1] = {0xff};
-      size_t crc8_s = serial_.read(head_crc8, 1);
+      (void)serial_.read(head_crc8, 1);
       uint8_t head_crc16_H[1] = {0xff};
       uint8_t head_crc16_L[1] = {0xff};
-      size_t crc16_H_s = serial_.read(head_crc16_H, 1);
-      size_t crc16_L_s = serial_.read(head_crc16_L, 1);
+      (void)serial_.read(head_crc16_H, 1);
+      (void)serial_.read(head_crc16_L, 1);
       if (if_debug_){
         std::cout << "check_sn: "     << std::hex << (int)check_sn[0]     << std::dec << std::endl;
         std::cout << "head_crc8: "    << std::hex << (int)head_crc8[0]    << std::dec << std::endl;
@@ -273,7 +273,7 @@ private:
         if (CRC8 != imu_frame_.frame.header.header_crc8)
         {
           RCLCPP_WARN_STREAM_SKIPFIRST(this->get_logger(),"header_crc8 error");
-          continue;
+          return;
         }
         if(!frist_sn_){
           read_sn_  = imu_frame_.frame.header.serial_num - 1;
@@ -295,7 +295,7 @@ private:
         if (CRC8 != ahrs_frame_.frame.header.header_crc8)
         {
           RCLCPP_WARN_STREAM_SKIPFIRST(this->get_logger(),"header_crc8 error");
-          continue;
+          return;
         }
         if(!frist_sn_){
           read_sn_  = ahrs_frame_.frame.header.serial_num - 1;
@@ -317,7 +317,7 @@ private:
         if (CRC8 != insgps_frame_.frame.header.header_crc8)
         {
           RCLCPP_WARN_STREAM_SKIPFIRST(this->get_logger(),"header_crc8 error");
-          continue;
+          return;
         }
         else if(if_debug_)
         {
@@ -330,7 +330,7 @@ private:
         uint16_t head_crc16_l = imu_frame_.frame.header.header_crc16_l;
         uint16_t head_crc16_h = imu_frame_.frame.header.header_crc16_h;
         uint16_t head_crc16 = head_crc16_l + (head_crc16_h << 8);
-        size_t data_s = serial_.read(imu_frame_.read_buf.read_msg, (IMU_LEN + 1)); //48+1
+        (void)serial_.read(imu_frame_.read_buf.read_msg, (IMU_LEN + 1)); //48+1
         // if (if_debug_){
         //   for (size_t i = 0; i < (IMU_LEN + 1); i++)
         //   {
@@ -350,12 +350,12 @@ private:
         if (head_crc16 != CRC16)
         {
           RCLCPP_WARN_STREAM_SKIPFIRST(this->get_logger(),"check crc16 faild(imu).");
-          continue;
+          return;
         }
         else if(imu_frame_.frame.frame_end != FRAME_END)
         {
           RCLCPP_WARN_STREAM_SKIPFIRST(this->get_logger(),"check frame end.");
-          continue;
+          return;
         }
       }
       else if (head_type[0] == TYPE_AHRS)
@@ -363,7 +363,7 @@ private:
         uint16_t head_crc16_l = ahrs_frame_.frame.header.header_crc16_l;
         uint16_t head_crc16_h = ahrs_frame_.frame.header.header_crc16_h;
         uint16_t head_crc16 = head_crc16_l + (head_crc16_h << 8);
-        size_t data_s = serial_.read(ahrs_frame_.read_buf.read_msg, (AHRS_LEN + 1)); //48+1
+        (void)serial_.read(ahrs_frame_.read_buf.read_msg, (AHRS_LEN + 1)); //48+1
         // if (if_debug_){
         //   for (size_t i = 0; i < (AHRS_LEN + 1); i++)
         //   {
@@ -383,31 +383,31 @@ private:
         if (head_crc16 != CRC16)
         {
           RCLCPP_WARN_STREAM_SKIPFIRST(this->get_logger(),"check crc16 faild(ahrs).");
-          continue;
+          return;
         }
         else if(ahrs_frame_.frame.frame_end != FRAME_END)
         {
           RCLCPP_WARN_STREAM_SKIPFIRST(this->get_logger(),"check frame end.");
-          continue;
+          return;
         }
       }
       else if (head_type[0] == TYPE_INSGPS)
       {
         uint16_t head_crc16 = insgps_frame_.frame.header.header_crc16_l + ((uint16_t)insgps_frame_.frame.header.header_crc16_h << 8);
-        size_t data_s = serial_.read(insgps_frame_.read_buf.read_msg, (INSGPS_LEN + 1)); //48+1
+        (void)serial_.read(insgps_frame_.read_buf.read_msg, (INSGPS_LEN + 1)); //48+1
         uint16_t CRC16 = CRC16_Table(insgps_frame_.frame.data.data_buff, INSGPS_LEN);
         if (head_crc16 != CRC16)
         {
           RCLCPP_WARN_STREAM_SKIPFIRST(this->get_logger(),"check crc16 faild(insgps).");
-          continue;
+          return;
         }
         else if(insgps_frame_.frame.frame_end != FRAME_END)
         {
           RCLCPP_WARN_STREAM_SKIPFIRST(this->get_logger(),"check frame end.");
-          continue;
+          return;
         }
       }
-      // 
+      //
       // ============================ publish magyaw topic ========================================
       if (head_type[0] == TYPE_AHRS)
       {
@@ -419,10 +419,6 @@ private:
                                   ahrs_frame_.frame.data.data_pack.Qx,
                                   ahrs_frame_.frame.data.data_pack.Qy,
                                   ahrs_frame_.frame.data.data_pack.Qz);
-        Eigen::Quaterniond q_r =
-            Eigen::AngleAxisd(  PI, Eigen::Vector3d::UnitZ()) *
-            Eigen::AngleAxisd(  PI, Eigen::Vector3d::UnitY()) *
-            Eigen::AngleAxisd( 0.0, Eigen::Vector3d::UnitX());
         Eigen::Quaterniond q_rr =
             Eigen::AngleAxisd( 0.0, Eigen::Vector3d::UnitZ()) *
             Eigen::AngleAxisd( 0.0, Eigen::Vector3d::UnitY()) *
@@ -431,10 +427,6 @@ private:
             Eigen::AngleAxisd(  PI, Eigen::Vector3d::UnitZ()) *
             Eigen::AngleAxisd( 0.0, Eigen::Vector3d::UnitY()) *
             Eigen::AngleAxisd( 0.0, Eigen::Vector3d::UnitX());
-        Eigen::Quaterniond q_xiao_rr =
-            Eigen::AngleAxisd( PI/2.0, Eigen::Vector3d::UnitZ()) *
-            Eigen::AngleAxisd(    0.0, Eigen::Vector3d::UnitY()) *
-            Eigen::AngleAxisd(     PI, Eigen::Vector3d::UnitX());
         if (device_type_ == 0) //untransformed raw data
         {
           imu_data.orientation.w = ahrs_frame_.frame.data.data_pack.Qw;
@@ -444,9 +436,16 @@ private:
           imu_data.angular_velocity.x = ahrs_frame_.frame.data.data_pack.RollSpeed;
           imu_data.angular_velocity.y = ahrs_frame_.frame.data.data_pack.PitchSpeed;
           imu_data.angular_velocity.z = ahrs_frame_.frame.data.data_pack.HeadingSpeed;
-          imu_data.linear_acceleration.x = imu_frame_.frame.data.data_pack.accelerometer_x;
-          imu_data.linear_acceleration.y = imu_frame_.frame.data.data_pack.accelerometer_y;
-          imu_data.linear_acceleration.z = imu_frame_.frame.data.data_pack.accelerometer_z;
+          // Only use IMU frame data if we have received IMU packets
+          if (imu_frame_.frame.header.data_type == TYPE_IMU) {
+            imu_data.linear_acceleration.x = imu_frame_.frame.data.data_pack.accelerometer_x;
+            imu_data.linear_acceleration.y = imu_frame_.frame.data.data_pack.accelerometer_y;
+            imu_data.linear_acceleration.z = imu_frame_.frame.data.data_pack.accelerometer_z;
+          } else {
+            imu_data.linear_acceleration.x = 0.0;
+            imu_data.linear_acceleration.y = 0.0;
+            imu_data.linear_acceleration.z = 0.0;
+          }
         }
         else if (device_type_ == 1) // Coordinate transformation under ROS standard of imu single product
         {
@@ -458,9 +457,16 @@ private:
           imu_data.angular_velocity.x = ahrs_frame_.frame.data.data_pack.RollSpeed;
           imu_data.angular_velocity.y = ahrs_frame_.frame.data.data_pack.PitchSpeed;
           imu_data.angular_velocity.z = ahrs_frame_.frame.data.data_pack.HeadingSpeed;
-          imu_data.linear_acceleration.x = imu_frame_.frame.data.data_pack.accelerometer_x;
-          imu_data.linear_acceleration.y = imu_frame_.frame.data.data_pack.accelerometer_y;
-          imu_data.linear_acceleration.z = imu_frame_.frame.data.data_pack.accelerometer_z;
+          // Only use IMU frame data if we have received IMU packets
+          if (imu_frame_.frame.header.data_type == TYPE_IMU) {
+            imu_data.linear_acceleration.x = imu_frame_.frame.data.data_pack.accelerometer_x;
+            imu_data.linear_acceleration.y = imu_frame_.frame.data.data_pack.accelerometer_y;
+            imu_data.linear_acceleration.z = imu_frame_.frame.data.data_pack.accelerometer_z;
+          } else {
+            imu_data.linear_acceleration.x = 0.0;
+            imu_data.linear_acceleration.y = 0.0;
+            imu_data.linear_acceleration.z = 0.0;
+          }
         }
         imu_data.orientation_covariance[0] = imu_mag_cov[0];
         imu_data.orientation_covariance[4] = imu_mag_cov[1];
@@ -499,16 +505,24 @@ private:
         geometry_msgs::msg::Pose2D pose_2d;
         double magx, magy, magz, roll, pitch;
         if (device_type_ == 0){ //untransformed raw data//
-          magx  = imu_frame_.frame.data.data_pack.magnetometer_x;
-          magy  = imu_frame_.frame.data.data_pack.magnetometer_y;
-          magz  = imu_frame_.frame.data.data_pack.magnetometer_z;
+          if (imu_frame_.frame.header.data_type == TYPE_IMU) {
+            magx  = imu_frame_.frame.data.data_pack.magnetometer_x;
+            magy  = imu_frame_.frame.data.data_pack.magnetometer_y;
+            magz  = imu_frame_.frame.data.data_pack.magnetometer_z;
+          } else {
+            magx = magy = magz = 0.0;
+          }
           roll  = ahrs_frame_.frame.data.data_pack.Roll;
           pitch = ahrs_frame_.frame.data.data_pack.Pitch;
         }
         else if (device_type_ == 1){ //Coordinate transformation of car and imu single product ROS standard//
-          magx  = imu_frame_.frame.data.data_pack.magnetometer_x;
-          magy  = imu_frame_.frame.data.data_pack.magnetometer_y;
-          magz  = imu_frame_.frame.data.data_pack.magnetometer_z;
+          if (imu_frame_.frame.header.data_type == TYPE_IMU) {
+            magx  = imu_frame_.frame.data.data_pack.magnetometer_x;
+            magy  = imu_frame_.frame.data.data_pack.magnetometer_y;
+            magz  = imu_frame_.frame.data.data_pack.magnetometer_z;
+          } else {
+            magx = magy = magz = 0.0;
+          }
 
           Eigen::Vector3d EulerAngle = rpy_q.matrix().eulerAngles(2, 1, 0);
           roll  = EulerAngle[2];
@@ -539,7 +553,7 @@ private:
       // printf(" %s : %i\n", serial_port_.c_str(), serial_baud_ );
       // rclcpp::sleep_for(std::chrono::seconds(1));
     }
-    
+
   }
 
   void magCalculateYaw(double roll, double pitch, double &magyaw, double magx, double magy, double magz)
@@ -625,7 +639,7 @@ private:
       break;
     }
   }
-  
+
   //
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_trueEast_pub_;
