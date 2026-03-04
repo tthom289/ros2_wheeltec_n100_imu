@@ -25,6 +25,7 @@ public:
     this->declare_parameter("imu_frame", "imu");
     this->declare_parameter("mag_pose_2d_topic", "magnetic_pose_2d");
     this->declare_parameter("imu_trueEast_topic", "imu_trueEast");
+    this->declare_parameter("imu_ahrs_topic", "imu_ahrs");
     this->declare_parameter("mag_topic", "magnetic_field");
     this->declare_parameter("yaw_offset", -2.094);
     this->declare_parameter("mag_offset_x", 0.0);
@@ -42,6 +43,7 @@ public:
     device_type_ = this->get_parameter("device_type").as_int();
     frist_sn_ = this->get_parameter("frist_sn").as_bool();
     imu_topic_ = this->get_parameter("imu_topic").as_string();
+    imu_ahrs_topic_ = this->get_parameter("imu_ahrs_topic").as_string();
     mag_pose_2d_topic_ = this->get_parameter("mag_pose_2d_topic").as_string();
     imu_trueEast_topic_ = this->get_parameter("imu_trueEast_topic").as_string();
     mag_topic_ = this->get_parameter("mag_topic").as_string();
@@ -83,6 +85,7 @@ public:
 
     // """ publishers """
     imu_pub_ = this->create_publisher<sensor_msgs::msg::Imu>(imu_topic_.c_str(), 10);
+    imu_ahrs_pub_ = this->create_publisher<sensor_msgs::msg::Imu>(imu_ahrs_topic_.c_str(), 10);
     imu_trueEast_pub_ = this->create_publisher<sensor_msgs::msg::Imu>(imu_trueEast_topic_.c_str(), 10);
     mag_pose_pub_ = this->create_publisher<geometry_msgs::msg::Pose2D>(mag_pose_2d_topic_.c_str(), 10);
     mag_pub_ = this->create_publisher<sensor_msgs::msg::MagneticField>(mag_topic_.c_str(), 10);
@@ -144,6 +147,7 @@ private:
 
   // ros2 topics
   std::string imu_topic_;
+  std::string imu_ahrs_topic_;
   std::string mag_pose_2d_topic_;
   std::string imu_trueEast_topic_;
   std::string mag_topic_;
@@ -433,15 +437,18 @@ private:
           imu_data.orientation.x = ahrs_frame_.frame.data.data_pack.Qx;
           imu_data.orientation.y = ahrs_frame_.frame.data.data_pack.Qy;
           imu_data.orientation.z = ahrs_frame_.frame.data.data_pack.Qz;
-          imu_data.angular_velocity.x = ahrs_frame_.frame.data.data_pack.RollSpeed;
-          imu_data.angular_velocity.y = ahrs_frame_.frame.data.data_pack.PitchSpeed;
-          imu_data.angular_velocity.z = ahrs_frame_.frame.data.data_pack.HeadingSpeed;
           // Only use IMU frame data if we have received IMU packets
           if (imu_frame_.frame.header.data_type == TYPE_IMU) {
+            imu_data.angular_velocity.x = imu_frame_.frame.data.data_pack.gyroscope_x;
+            imu_data.angular_velocity.y = imu_frame_.frame.data.data_pack.gyroscope_y;
+            imu_data.angular_velocity.z = imu_frame_.frame.data.data_pack.gyroscope_z;
             imu_data.linear_acceleration.x = imu_frame_.frame.data.data_pack.accelerometer_x;
             imu_data.linear_acceleration.y = imu_frame_.frame.data.data_pack.accelerometer_y;
             imu_data.linear_acceleration.z = imu_frame_.frame.data.data_pack.accelerometer_z;
           } else {
+            imu_data.angular_velocity.x = 0.0;
+            imu_data.angular_velocity.y = 0.0;
+            imu_data.angular_velocity.z = 0.0;
             imu_data.linear_acceleration.x = 0.0;
             imu_data.linear_acceleration.y = 0.0;
             imu_data.linear_acceleration.z = 0.0;
@@ -454,15 +461,18 @@ private:
           imu_data.orientation.x = q_out.x();
           imu_data.orientation.y = q_out.y();
           imu_data.orientation.z = q_out.z();
-          imu_data.angular_velocity.x = ahrs_frame_.frame.data.data_pack.RollSpeed;
-          imu_data.angular_velocity.y = ahrs_frame_.frame.data.data_pack.PitchSpeed;
-          imu_data.angular_velocity.z = ahrs_frame_.frame.data.data_pack.HeadingSpeed;
           // Only use IMU frame data if we have received IMU packets
           if (imu_frame_.frame.header.data_type == TYPE_IMU) {
+            imu_data.angular_velocity.x = imu_frame_.frame.data.data_pack.gyroscope_x;
+            imu_data.angular_velocity.y = imu_frame_.frame.data.data_pack.gyroscope_y;
+            imu_data.angular_velocity.z = imu_frame_.frame.data.data_pack.gyroscope_z;
             imu_data.linear_acceleration.x = imu_frame_.frame.data.data_pack.accelerometer_x;
             imu_data.linear_acceleration.y = imu_frame_.frame.data.data_pack.accelerometer_y;
             imu_data.linear_acceleration.z = imu_frame_.frame.data.data_pack.accelerometer_z;
           } else {
+            imu_data.angular_velocity.x = 0.0;
+            imu_data.angular_velocity.y = 0.0;
+            imu_data.angular_velocity.z = 0.0;
             imu_data.linear_acceleration.x = 0.0;
             imu_data.linear_acceleration.y = 0.0;
             imu_data.linear_acceleration.z = 0.0;
@@ -478,6 +488,16 @@ private:
         imu_data.linear_acceleration_covariance[4] = imu_accel_cov[1];
         imu_data.linear_acceleration_covariance[8] = imu_accel_cov[2];
         imu_pub_->publish(imu_data);
+        // Publish AHRS Euler rates on /imu_ahrs for reference
+        sensor_msgs::msg::Imu imu_ahrs_data;
+        imu_ahrs_data.header = imu_data.header;
+        imu_ahrs_data.orientation = imu_data.orientation;
+        imu_ahrs_data.angular_velocity.x = ahrs_frame_.frame.data.data_pack.RollSpeed;
+        imu_ahrs_data.angular_velocity.y = ahrs_frame_.frame.data.data_pack.PitchSpeed;
+        imu_ahrs_data.angular_velocity.z = ahrs_frame_.frame.data.data_pack.HeadingSpeed;
+        imu_ahrs_data.orientation_covariance = imu_data.orientation_covariance;
+        imu_ahrs_data.angular_velocity_covariance = imu_data.angular_velocity_covariance;
+        imu_ahrs_pub_->publish(imu_ahrs_data);
         // true East heading publish ----
         tf2::Quaternion q_new;
         tf2::Quaternion q_orig(
@@ -642,6 +662,7 @@ private:
 
   //
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_ahrs_pub_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_trueEast_pub_;
   rclcpp::Publisher<geometry_msgs::msg::Pose2D>::SharedPtr mag_pose_pub_;
   rclcpp::Publisher<sensor_msgs::msg::MagneticField>::SharedPtr mag_pub_;
